@@ -1,0 +1,82 @@
+  // optional import of sdk modules
+import { monitoredEntitiesClient } from "@dynatrace-sdk/client-classic-environment-v2";
+import { settingsObjectsClient } from "@dynatrace-sdk/client-classic-environment-v2";
+
+import { units } from "@dynatrace-sdk/units"
+
+export default async function () {
+  const entitiesList: any[] = [];
+  const configsList: any[] = [];
+  var jsonText = [];
+  
+  let configResponse = await importMaintenanceWindows();
+  configsList.push(...configResponse.items.map(i => i));
+  
+  while (configResponse.nextPageKey){
+  configResponse = await importMaintenanceWindowsNextPage(configResponse.nextPageKey);
+  configsList.push(...configResponse.items.map(i => i));
+  }
+
+
+function importMaintenanceWindows() {
+let configs = settingsObjectsClient.getSettingsObjects({
+  schemaIds: "builtin:alerting.maintenance-window",
+  fields: "value",
+});
+  return configs;
+}
+
+function importMaintenanceWindowsNextPage(_nextPageKey) {
+let configs = settingsObjectsClient.getSettingsObjects({
+  nextPageKey: _nextPageKey
+});
+  return configs;
+}
+
+  let type;
+  let id;
+  let tags;
+  let mz;
+  
+  var windows = [];
+  let passEmoji;
+  let enableEmoji
+  let name
+  for (var key in configsList){
+  let recommend = [];
+  if(configsList[key]['value']['enabled']){
+    enableEmoji = "🟢"
+  } else enableEmoji = "🔴"
+
+  if (configsList[key]['value']['filters'].length === 0){
+    passEmoji = "🔴"
+    recommend.push("No filters have been defined! Maintenance window is GLOBAL!!!")
+    } else if (configsList[key]['value']['generalProperties']['suppression'] != "DONT_DETECT_PROBLEMS"){
+    passEmoji = "🔴"
+    recommend.push("Set the window to DISABLE PROBLEM DETECTION!")
+    } else if (configsList[key]['value']['schedule']['scheduleType'] === "DAILY"){
+    if (configsList[key]['value']['schedule']['dailyRecurrence']['timeWindow']['timeZone'] != "Europe/London"){
+    passEmoji = "🔴"
+    recommend.push("Set the timezone to Europe/London (British Time)!")
+    } else passEmoji = "🟢"
+    } else if (configsList[key]['value']['schedule']['scheduleType'] === "ONCE"){
+    if (configsList[key]['value']['schedule']['onceRecurrence']['timeZone'] != "Europe/London"){
+    passEmoji = "🔴"
+    recommend.push("Set the timezone to Europe/London (British Time)!")
+    } else passEmoji = "🟢"
+    } else {
+    passEmoji = "🟢"
+    }
+  name = configsList[key]['value']['generalProperties']['name']
+  let recommendationString = recommend.join(" and ")
+    var myObj = {
+      name: name,
+      enabled: enableEmoji,
+      pass: passEmoji,
+      recommendation: recommendationString
+    }
+    jsonText.push(myObj);
+  }
+
+return jsonText;
+}
